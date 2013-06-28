@@ -32,9 +32,10 @@ function [ X_MY, Y_MX, X1, Y1] = xmap( X, Y, MX, MY, E, tau, L, sampling )
 %   time-shifted (for linear sampling) or shuffled (for random sampling)
 %   data vectors are returned in the variables X1 and Y1. These can be
 %   directly compared to X_MY and Y_MX element by element.
+%
+%   Author: Dan Mønster, 2013
 %   
 %   see also psembed
-
 
 %
 % Check the input variables and issue an error message if something is
@@ -87,14 +88,37 @@ end
 %
 switch (sampling)
     case 'linear'
+        % Select the first L points from the reconstructed manifold.
         MX = MX(1:L,:);
         MY = MY(1:L,:);
     case 'random'
-        % Uniformly distributed random intergers between 1 and n
-        idx = randi(n,size([1:L]')); 
-        MX = MX(idx,:);     
-        idy = randi(n,size([1:L]'));
-        MY = MY(idy,:);        
+        % With this method a random sample of L points on the reconstructed
+        % attractor is used. To do this we first generate a set of
+        % uniformly distributed random integers between 1 and n. From this
+        % set we draw L unique numbers. If L = n this is just a shuffled
+        % version of the original indices, so the random sampling is most
+        % useful when L << n, to avoid points which are highly correlated.
+        % In the large L limit the results using this method should
+        % converge to the results using the linear method.
+        for var = 1:2
+            N_indices = 2*L;
+            sample_indices = unique(randi(n,[N_indices 1]));
+            while numel(sample_indices) < L,
+                N_indices = round(1.2 * N_indices); % Increase by 20%
+                sample_indices = unique(randi(n,[N_indices 1]));
+            end
+            % The indices are now sorted, so we make a random permutation
+            % and draw the L first indices.
+            sample_indices = sample_indices(randperm(numel(sample_indices)));
+            switch (var)
+                case 1
+                    idx = sample_indices(1:L);
+                    MX = MX(idx,:);
+                case 2
+                    idy = sample_indices(1:L);
+                    MY = MY(idy,:);
+            end
+        end
     otherwise
         errorstring = sprintf('Unknown sampling type: %s',sampling);
         error('xmap:sampling', errorstring);
@@ -133,7 +157,7 @@ end
 % floating point overflow, resulting in NaN. Perhaps a better choice would
 % be to let it depend on the numerator. Investigate and test this further!
 %
-EPS = 1e-9;
+EPS = 1e-8;
 w = zeros(L,E+1);
 for p=1:L
     w(p,:) = exp(-d(p,2:E+2)/(EPS+d(p,2)));
